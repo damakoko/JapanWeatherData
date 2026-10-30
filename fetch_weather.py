@@ -1,5 +1,9 @@
+
 #!/usr/bin/env python3
-"""Fetch current weather for Japan's 47 prefectural capitals.
+"""Fetch current weather for 50 locations across Japan.
+
+Includes all 47 prefectural capitals plus Asahikawa,
+Hakodate, and Kushiro in Hokkaido.
 
 Requires Python 3.11+; standard library only.
 """
@@ -60,6 +64,11 @@ LOCATIONS = [
     (45, '宮崎県', '宮崎', 31.9111, 131.4239),
     (46, '鹿児島県', '鹿児島', 31.5966, 130.5571),
     (47, '沖縄県', '那覇', 26.2124, 127.6809),
+
+    # Additional Hokkaido locations
+    (48, '北海道', '旭川', 43.7708, 142.3648),
+    (49, '北海道', '函館', 41.7687, 140.7291),
+    (50, '北海道', '釧路', 42.9849, 144.3817),
 ]
 
 BASE_URL = 'https://api.open-meteo.com/v1/forecast'
@@ -74,19 +83,49 @@ def fetch():
         'timezone': 'Asia/Tokyo',
         'forecast_days': '1',
     }
-    req = Request(BASE_URL + '?' + urlencode(params), headers={'User-Agent': 'JapanWeatherData/1.0 (weather data prototype)'})
+
+    req = Request(
+        BASE_URL + '?' + urlencode(params),
+        headers={
+            'User-Agent': 'JapanWeatherData/1.0 (weather data prototype)'
+        }
+    )
+
     with urlopen(req, timeout=45) as response:
         result = json.load(response)
+
     if not isinstance(result, list) or len(result) != len(LOCATIONS):
-        raise ValueError(f'Expected {len(LOCATIONS)} locations; got {type(result).__name__} / {len(result) if isinstance(result, list) else "n/a"}')
+        raise ValueError(
+            f'Expected {len(LOCATIONS)} locations; '
+            f'got {type(result).__name__} / '
+            f'{len(result) if isinstance(result, list) else "n/a"}'
+        )
+
     output = []
+
     for loc, item in zip(LOCATIONS, result):
         current = item.get('current', {})
-        needed = ('temperature_2m', 'relative_humidity_2m', 'weather_code', 'precipitation', 'rain', 'snowfall', 'wind_speed_10m', 'time')
+
+        needed = (
+            'temperature_2m',
+            'relative_humidity_2m',
+            'weather_code',
+            'precipitation',
+            'rain',
+            'snowfall',
+            'wind_speed_10m',
+            'time'
+        )
+
         if any(current.get(k) is None for k in needed):
-            raise ValueError(f'Missing current weather data for {loc[2]}')
+            raise ValueError(
+                f'Missing current weather data for {loc[2]}'
+            )
+
         output.append({
-            'id': loc[0], 'prefecture': loc[1], 'city': loc[2],
+            'id': loc[0],
+            'prefecture': loc[1],
+            'city': loc[2],
             'weather_code': int(current['weather_code']),
             'temperature_c': float(current['temperature_2m']),
             'humidity_pct': int(current['relative_humidity_2m']),
@@ -96,31 +135,58 @@ def fetch():
             'wind_kmh': float(current['wind_speed_10m']),
             'observed_at': current['time'] + '+09:00',
         })
+
     return {
         'schema_version': 1,
         'source': 'Open-Meteo',
-        'updated_at': datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z'),
+        'updated_at': datetime.now(timezone.utc)
+        .isoformat(timespec='seconds')
+        .replace('+00:00', 'Z'),
         'location_count': len(output),
         'locations': output,
     }
 
 
 def main():
-    if len(LOCATIONS) != 47 or len({x[0] for x in LOCATIONS}) != 47:
-        raise ValueError('Location configuration must contain 47 unique IDs')
+    if (
+        len(LOCATIONS) != 50
+        or len({x[0] for x in LOCATIONS}) != 50
+    ):
+        raise ValueError(
+            'Location configuration must contain 50 unique IDs'
+        )
+
     for attempt in range(3):
         try:
             data = fetch()
             break
+
         except Exception as exc:
             if attempt == 2:
                 raise
-            print(f'Attempt {attempt + 1} failed: {exc}; retrying...', flush=True)
+
+            print(
+                f'Attempt {attempt + 1} failed: {exc}; retrying...',
+                flush=True
+            )
             time.sleep(10 * (attempt + 1))
+
     tmp = OUT.with_suffix('.json.tmp')
-    tmp.write_text(json.dumps(data, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8')
+
+    tmp.write_text(
+        json.dumps(
+            data,
+            ensure_ascii=False,
+            separators=(',', ':')
+        ) + '\n',
+        encoding='utf-8'
+    )
+
     os.replace(tmp, OUT)
-    print(f'Wrote {OUT} with {len(data["locations"])} locations')
+
+    print(
+        f'Wrote {OUT} with {len(data["locations"])} locations'
+    )
 
 
 if __name__ == '__main__':
