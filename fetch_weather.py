@@ -1,13 +1,8 @@
-
 #!/usr/bin/env python3
-"""Fetch current weather for 50 locations across Japan.
-
-Hokkaido: Sapporo, Asahikawa, Hakodate, Kushiro (IDs 1-4).
-Other 46 prefectural capitals: IDs 5-50.
+"""Fetch current weather for 50 Japanese locations (47 prefectural capitals plus 3 in Hokkaido).
 
 Requires Python 3.11+; standard library only.
 """
-
 import json
 import os
 import time
@@ -16,16 +11,12 @@ from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-
-# ID 1-4: Hokkaido
-# ID 5-50: Other prefectural capitals
-# Coordinates: approximate city-centre latitude/longitude.
+# Coordinates are approximate city-centre positions (latitude, longitude).
 LOCATIONS = [
     (1, '北海道', '札幌', 43.0618, 141.3545),
-    (2, '北海道', '旭川', 43.7708, 142.3648),
-    (3, '北海道', '函館', 41.7687, 140.7291),
-    (4, '北海道', '釧路', 42.9849, 144.3817),
-
+    (2, '北海道', '旭川', 43.7706, 142.3650),
+    (3, '北海道', '函館', 41.7687, 140.7288),
+    (4, '北海道', '釧路', 42.9849, 144.3818),
     (5, '青森県', '青森', 40.8244, 140.7400),
     (6, '岩手県', '盛岡', 39.7019, 141.1545),
     (7, '宮城県', '仙台', 38.2682, 140.8694),
@@ -74,170 +65,66 @@ LOCATIONS = [
     (50, '沖縄県', '那覇', 26.2124, 127.6809),
 ]
 
-
 BASE_URL = 'https://api.open-meteo.com/v1/forecast'
 OUT = Path(__file__).with_name('weather.json')
 
 
-def validate_locations():
-    if len(LOCATIONS) != 50:
-        raise ValueError(
-            f'Expected 50 locations, got {len(LOCATIONS)}'
-        )
-
-    actual_ids = [loc[0] for loc in LOCATIONS]
-    expected_ids = list(range(1, 51))
-
-    if actual_ids != expected_ids:
-        raise ValueError(
-            'Location IDs must be ordered consecutively from 1 to 50'
-        )
-
-    if len({(loc[1], loc[2]) for loc in LOCATIONS}) != 50:
-        raise ValueError('Duplicate prefecture/city detected')
-
-
 def fetch():
     params = {
-        'latitude': ','.join(
-            str(x[3]) for x in LOCATIONS
-        ),
-        'longitude': ','.join(
-            str(x[4]) for x in LOCATIONS
-        ),
-        'current': (
-            'temperature_2m,relative_humidity_2m,'
-            'weather_code,precipitation,rain,'
-            'snowfall,wind_speed_10m'
-        ),
+        'latitude': ','.join(str(x[3]) for x in LOCATIONS),
+        'longitude': ','.join(str(x[4]) for x in LOCATIONS),
+        'current': 'temperature_2m,relative_humidity_2m,weather_code,precipitation,rain,snowfall,wind_speed_10m,wind_direction_10m',
         'timezone': 'Asia/Tokyo',
         'forecast_days': '1',
     }
-
-    req = Request(
-        BASE_URL + '?' + urlencode(params),
-        headers={
-            'User-Agent': (
-                'JapanWeatherData/1.0 '
-                '(weather data prototype)'
-            )
-        }
-    )
-
+    req = Request(BASE_URL + '?' + urlencode(params), headers={'User-Agent': 'JapanWeatherData/1.0 (weather data prototype)'})
     with urlopen(req, timeout=45) as response:
         result = json.load(response)
-
-    if (
-        not isinstance(result, list)
-        or len(result) != len(LOCATIONS)
-    ):
-        raise ValueError(
-            f'Expected {len(LOCATIONS)} locations; '
-            f'got {type(result).__name__} / '
-            f'{len(result) if isinstance(result, list) else "n/a"}'
-        )
-
+    if not isinstance(result, list) or len(result) != len(LOCATIONS):
+        raise ValueError(f'Expected {len(LOCATIONS)} locations; got {type(result).__name__} / {len(result) if isinstance(result, list) else "n/a"}')
     output = []
-
     for loc, item in zip(LOCATIONS, result):
         current = item.get('current', {})
-
-        needed = (
-            'temperature_2m',
-            'relative_humidity_2m',
-            'weather_code',
-            'precipitation',
-            'rain',
-            'snowfall',
-            'wind_speed_10m',
-            'time',
-        )
-
+        needed = ('temperature_2m', 'relative_humidity_2m', 'weather_code', 'precipitation', 'rain', 'snowfall', 'wind_speed_10m', 'wind_direction_10m', 'time')
         if any(current.get(k) is None for k in needed):
-            raise ValueError(
-                f'Missing current weather data for {loc[2]}'
-            )
-
+            raise ValueError(f'Missing current weather data for {loc[2]}')
         output.append({
-            'id': loc[0],
-            'prefecture': loc[1],
-            'city': loc[2],
-            'weather_code': int(
-                current['weather_code']
-            ),
-            'temperature_c': float(
-                current['temperature_2m']
-            ),
-            'humidity_pct': int(
-                current['relative_humidity_2m']
-            ),
-            'precipitation_mm': float(
-                current['precipitation']
-            ),
-            'rain_mm': float(
-                current['rain']
-            ),
-            'snowfall_cm': float(
-                current['snowfall']
-            ),
-            'wind_kmh': float(
-                current['wind_speed_10m']
-            ),
-            'observed_at': (
-                current['time'] + '+09:00'
-            ),
+            'id': loc[0], 'prefecture': loc[1], 'city': loc[2],
+            'weather_code': int(current['weather_code']),
+            'temperature_c': float(current['temperature_2m']),
+            'humidity_pct': int(current['relative_humidity_2m']),
+            'precipitation_mm': float(current['precipitation']),
+            'rain_mm': float(current['rain']),
+            'snowfall_cm': float(current['snowfall']),
+            'wind_kmh': float(current['wind_speed_10m']),
+            'wind_direction_deg': float(current['wind_direction_10m']),
+            'observed_at': current['time'] + '+09:00',
         })
-
     return {
         'schema_version': 1,
         'source': 'Open-Meteo',
-        'updated_at': (
-            datetime.now(timezone.utc)
-            .isoformat(timespec='seconds')
-            .replace('+00:00', 'Z')
-        ),
+        'updated_at': datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z'),
         'location_count': len(output),
         'locations': output,
     }
 
 
 def main():
-    validate_locations()
-
+    if len(LOCATIONS) != 50 or {x[0] for x in LOCATIONS} != set(range(1, 51)):
+        raise ValueError('Location configuration must contain 50 consecutive unique IDs (1-50)')
     for attempt in range(3):
         try:
             data = fetch()
             break
-
         except Exception as exc:
             if attempt == 2:
                 raise
-
-            print(
-                f'Attempt {attempt + 1} failed: '
-                f'{exc}; retrying...',
-                flush=True
-            )
-
+            print(f'Attempt {attempt + 1} failed: {exc}; retrying...', flush=True)
             time.sleep(10 * (attempt + 1))
-
     tmp = OUT.with_suffix('.json.tmp')
-
-    tmp.write_text(
-        json.dumps(
-            data,
-            ensure_ascii=False,
-            separators=(',', ':')
-        ) + '\n',
-        encoding='utf-8'
-    )
-
+    tmp.write_text(json.dumps(data, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8')
     os.replace(tmp, OUT)
-
-    print(
-        f'Wrote {OUT} with '
-        f'{len(data["locations"])} locations'
-    )
+    print(f'Wrote {OUT} with {len(data["locations"])} locations')
 
 
 if __name__ == '__main__':
