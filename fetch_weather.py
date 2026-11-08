@@ -65,6 +65,9 @@ LOCATIONS = [
     (50, '沖縄県', '那覇', 26.2124, 127.6809),
 ]
 
+# 既存配布アセットの風向表示を補正（時計回り90度のずれを相殺）
+WIND_DIRECTION_OFFSET_DEG = -90.0
+
 BASE_URL = 'https://api.open-meteo.com/v1/forecast'
 OUT = Path(__file__).with_name('weather.json')
 
@@ -97,7 +100,7 @@ def fetch():
             'rain_mm': float(current['rain']),
             'snowfall_cm': float(current['snowfall']),
             'wind_kmh': float(current['wind_speed_10m']),
-            'wind_direction_deg': float(current['wind_direction_10m']),
+            'wind_direction_deg': (float(current['wind_direction_10m']) + WIND_DIRECTION_OFFSET_DEG) % 360.0,
             'observed_at': current['time'] + '+09:00',
         })
     return {
